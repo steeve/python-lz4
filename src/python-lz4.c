@@ -1,3 +1,5 @@
+#define PY_SSIZE_T_CLEAN
+
 #include "stdlib.h"
 #include "math.h"
 #include "Python.h"
@@ -30,14 +32,25 @@ compress_with(compressor compress, PyObject *self, PyObject *args)
 {
     PyObject *result;
     const char *source;
-    int source_size;
+    size_t source_size;
     char *dest;
     int dest_size;
 
     if (!PyArg_ParseTuple(args, "s#", &source, &source_size))
         return NULL;
 
-    dest_size = hdr_size + LZ4_compressBound(source_size);
+    if (source_size > INT_MAX) {
+	PyErr_SetString(PyExc_ValueError, "input too long");
+	return NULL;
+    }
+
+    dest_size = LZ4_compressBound(source_size);
+    if (dest_size < 0 || (size_t)dest_size + hdr_size > INT_MAX) {
+	PyErr_SetString(PyExc_ValueError, "input too long");
+	return NULL;
+    }
+
+    dest_size += hdr_size;
     result = PyString_FromStringAndSize(NULL, dest_size);
     if (result == NULL)
 	return NULL;
@@ -70,7 +83,7 @@ py_lz4_uncompress(PyObject *self, PyObject *args)
 {
     PyObject *result;
     const char *source;
-    int source_size;
+    size_t source_size;
     uint32_t dest_size;
 
     if (!PyArg_ParseTuple(args, "s#", &source, &source_size))
