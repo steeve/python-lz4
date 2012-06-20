@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 
-"""Setup file for veezio backend"""
+"""Setup file for lz4 backend"""
 
 from setuptools import setup, find_packages, Extension
 
-VERSION = (0, 4, 0)
+VERSION = (0, 4, 1)
 
 setup(
     name='lz4',

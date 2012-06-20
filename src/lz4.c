@@ -327,6 +327,10 @@ inline static int LZ4_NbCommonBytes (register U32 val)
 
 int LZ4_compressBound(int isize)
 {
+	static const int max_size = 2139095024;
+	if (isize < 0 || isize > max_size) {
+		return -1;
+	}
 	return (isize + (isize/255) + 16);
 }
 
