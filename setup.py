@@ -20,7 +20,9 @@ setup(
             'src/lz4.c',
             'src/lz4hc.c',
             'src/python-lz4.c'
-        ], extra_compile_args=["-O4"])
+            ],
+            extra_compile_args=["-O3"]
+        )
     ],
     setup_requires=["nose>=1.0"],
     test_suite = "nose.collector",
