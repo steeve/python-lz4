@@ -33,12 +33,17 @@
 
 static PyObject *py_lz4_compress(PyObject *self, PyObject *args);
 static PyObject *py_lz4_uncompress(PyObject *self, PyObject *args);
+static PyObject *py_lz4_compressFileDefault(PyObject *self, PyObject *args);
+static PyObject *py_lz4_decompressFileDefault(PyObject *self, PyObject *args);
 
 PyMODINIT_FUNC initlz4(void);
 
 #define COMPRESS_DOCSTRING      "Compress string, returning the compressed data.\nRaises an exception if any error occurs."
 #define COMPRESSHC_DOCSTRING    COMPRESS_DOCSTRING "\n\nCompared to compress, this gives a better compression ratio, but is much slower."
 #define UNCOMPRESS_DOCSTRING    "Decompress string, returning the uncompressed data.\nRaises an exception if any error occurs."
+#define COMPRESS_FILE_DOCSTRING "Compress file, by default adds .lz4 extension to original filename."\
+                                "\nAccepts two arguments, inputFile and compression level."
+#define DECOMPRESS_FILE_DOCSTRING   "Decompresses file, removes the extension by default, preserves original."
 
 #if defined(_WIN32) && defined(_MSC_VER)
 # define inline __inline

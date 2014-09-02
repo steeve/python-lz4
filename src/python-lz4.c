@@ -32,9 +32,11 @@
 #include <Python.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
 #include <math.h>
 #include "lz4.h"
 #include "lz4hc.h"
+#include "lz4io.h"
 #include "python-lz4.h"
 
 #define MAX(a, b)               ((a) > (b) ? (a) : (b))
@@ -62,6 +64,7 @@ static PyObject *compress_with(compressor compress, PyObject *self, PyObject *ar
     char *dest;
     int dest_size;
 
+    (void)self;
     if (!PyArg_ParseTuple(args, "s#", &source, &source_size))
         return NULL;
 
@@ -99,6 +102,7 @@ static PyObject *py_lz4_uncompress(PyObject *self, PyObject *args) {
     int source_size;
     uint32_t dest_size;
 
+    (void)self;
     if (!PyArg_ParseTuple(args, "s#", &source, &source_size)) {
         return NULL;
     }
@@ -125,6 +129,47 @@ static PyObject *py_lz4_uncompress(PyObject *self, PyObject *args) {
     return result;
 }
 
+
+static PyObject *py_lz4_compressFileDefault(PyObject *self, PyObject *args) {
+    char* input;
+    char* output;
+    int compLevel;
+    
+    (void)self;
+    if (!PyArg_ParseTuple(args, "si", &input, &compLevel)) {
+        return NULL;
+    }
+    
+    output = (char*)malloc(strlen(input)+4);
+    strcpy(output, input);
+    strcat(output, ".lz4");
+    
+    LZ4IO_compressFilename(input, output, compLevel);
+    return Py_None;
+}
+
+
+static PyObject *py_lz4_decompressFileDefault(PyObject *self, PyObject *args) {
+    char* input;
+    char* output;
+    int outLen;
+
+    (void)self;
+    if (!PyArg_ParseTuple(args, "s", &input)) {
+        return NULL;
+    }
+    
+    outLen=strlen(input) - 4;
+    output = (char*)calloc(outLen, sizeof(char));
+    strncpy(output, input, outLen);
+    
+    printf("%s \n", output);
+
+    LZ4IO_decompressFilename(input, output);
+    return Py_None;
+}
+
+
 static PyMethodDef Lz4Methods[] = {
     {"LZ4_compress",  py_lz4_compress, METH_VARARGS, COMPRESS_DOCSTRING},
     {"LZ4_uncompress",  py_lz4_uncompress, METH_VARARGS, UNCOMPRESS_DOCSTRING},
@@ -134,6 +179,8 @@ static PyMethodDef Lz4Methods[] = {
     {"decompress",  py_lz4_uncompress, METH_VARARGS, UNCOMPRESS_DOCSTRING},
     {"dumps",  py_lz4_compress, METH_VARARGS, COMPRESS_DOCSTRING},
     {"loads",  py_lz4_uncompress, METH_VARARGS, UNCOMPRESS_DOCSTRING},
+    {"compressFileDefault", py_lz4_compressFileDefault, METH_VARARGS, COMPRESS_FILE_DOCSTRING},
+    {"decompressFileDefault", py_lz4_decompressFileDefault, METH_VARARGS, DECOMPRESS_FILE_DOCSTRING},
     {NULL, NULL, 0, NULL}
 };
 
@@ -201,10 +248,6 @@ void initlz4(void)
         Py_DECREF(module);
         INITERROR;
     }
-
-    PyModule_AddStringConstant(module, "VERSION", VERSION);
-    PyModule_AddStringConstant(module, "__version__", VERSION);
-    PyModule_AddStringConstant(module, "LZ4_VERSION", LZ4_VERSION);
 
 #if PY_MAJOR_VERSION >= 3
     return module;
