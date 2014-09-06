@@ -40,8 +40,7 @@
 #include "python-lz4.h"
 
 #define MAX(a, b)               ((a) > (b) ? (a) : (b))
-
-static PyObject *inputError;
+#define throwWarn(msg)    PyErr_WarnEx(PyExc_UserWarning, msg, 1)
 
 typedef int (*compressor)(const char *source, char *dest, int isize);
 
@@ -57,7 +56,7 @@ static inline uint32_t load_le32(const char *c) {
     return d[0] | (d[1] << 8) | (d[2] << 16) | (d[3] << 24);
 }
 
-static inline char* add_extension(char* input) {
+static inline char* add_extension(char *input) {
     char* output;
 
     output = (char*)malloc(strlen(input)+4);
@@ -143,7 +142,7 @@ static PyObject *py_lz4_uncompress(PyObject *self, PyObject *args) {
 
 static PyObject *py_lz4_compressFileDefault(PyObject *self, PyObject *args) {
     char* input;
-    char* output;
+    char* output = NULL;
     int compLevel = 0;
     
     (void)self;
@@ -162,16 +161,24 @@ static PyObject *py_lz4_compressFileAdv(PyObject *self, PyObject *args, \
     char* input;
     char* output = NULL;
     int compLevel = 0;
-    int overwrite = NULL;
-    int blockSizeID = NULL;
+    int overwrite = 1;
+    int blockSizeID = 7;
     int blockMode = 1;
-    int blockCheck = NULL;
-    int streamCheck = NULL;
-    int verbosity = NULL;
+    int blockCheck = 0;
+    int streamCheck = 1;
+    int verbosity = 0;
+
+    char* oMsg = "Invalid input for overwrite. Using default value.";
+    char* bmMsg = "Invalid input for blockMode. Using default value.";
+    char* bsMsg = "Invalid input for blockSizeID. Using default value.";
+    char* bcMsg = "Invalid input for blockCheck. Using default value.";
+    char* scMsg = "Invalid input for streamCheck. Using default value.";
+    char* vMsg = "Invalid input for verbosity. Using default value.";
 
     static char *kwlist[] = {"input", "compLevel", "output", "overwrite", 
                              "blockSizeID", "blockMode", "blockCheck", 
                              "streamCheck", "verbosity", NULL};
+
     (void)self;
     if (!PyArg_ParseTupleAndKeywords(args, keywds, "si|siiiiii", kwlist,
                                      &input, &compLevel, &output, &overwrite, 
@@ -181,42 +188,19 @@ static PyObject *py_lz4_compressFileAdv(PyObject *self, PyObject *args, \
     }
     
     if (!output) { output = add_extension(input); }
-    if (overwrite) { LZ4IO_setOverwrite(overwrite); }
-    if (blockSizeID) {
-        if ((3 < blockSizeID) && (blockSizeID < 8)) {
-            LZ4IO_setBlockSizeID(blockSizeID);
-        }
-        else {
-            PyErr_SetString(inputError, "Invalid input for blockSizeID");
-        }
-    }
-    if ((blockMode == 0) || (blockMode == 1)) {
-        if (blockMode == 0 ) {LZ4IO_setBlockMode(chainedBlocks);} 
-    }
-    else {
-        PyErr_SetString(inputError, "Invalid input for blockMode");
-        return NULL;
-    }
-    if ((blockCheck == 0) || (blockCheck == 1)) {
-        if (blockCheck == 1) {LZ4IO_setBlockChecksumMode(blockCheck);}
-    }
-    else {
-        PyErr_SetString(inputError, "Invalid input for blockCheck");
-        return NULL;
-    }
-    if ((streamCheck == 0) || (streamCheck == 1)) {
-        if (streamCheck == 0) {LZ4IO_setStreamChecksumMode(streamCheck);}
-    }
-    else {
-        PyErr_SetString(inputError, "Invalid input for streamCheck");
-        return NULL;
-    }
-    if ((-1 < verbosity) && (verbosity < 5)) {
-        LZ4IO_setNotificationLevel(verbosity);
-    }
-    else {
-        PyErr_SetString(inputError, "Invalid input for verbosity");
-    }
+    (overwrite!=0 && overwrite!=1) ? throwWarn(oMsg) : \
+                                     (void)LZ4IO_setOverwrite(overwrite);
+    (3 < blockSizeID && blockSizeID < 8) ? (void)LZ4IO_setBlockSizeID(blockSizeID) : \
+                                           throwWarn(bsMsg);
+    (blockCheck == 0 || blockCheck == 1) ? (void)LZ4IO_setBlockChecksumMode(blockCheck) : \
+                                           throwWarn(bcMsg);
+    (streamCheck == 0 || streamCheck == 1) ? (void)LZ4IO_setStreamChecksumMode(streamCheck) : \
+                                             throwWarn(scMsg);
+    (-1 < verbosity && verbosity < 5) ? (void)LZ4IO_setNotificationLevel(verbosity) : \
+                                        throwWarn(vMsg);
+    (blockMode == 0 || blockMode == 1) ? \
+        ((blockMode == 0 ) ? LZ4IO_setBlockMode(chainedBlocks) : \
+        (void)LZ4IO_setBlockMode(independentBlocks)) : throwWarn(bmMsg);
     
     LZ4IO_compressFilename(input, output, compLevel);
     return Py_None;
@@ -261,7 +245,6 @@ static PyMethodDef Lz4Methods[] = {
 struct module_state {
     PyObject *error;
 };
-
 
 #if PY_MAJOR_VERSION >= 3
 #define GETSTATE(m) ((struct module_state*)PyModule_GetState(m))
@@ -321,9 +304,6 @@ void initlz4(void)
         Py_DECREF(module);
         INITERROR;
     }
-    inputError = PyErr_NewException("input.error", NULL, NULL);
-    Py_INCREF(inputError);
-    PyModule_AddObject(module, "error", inputError);
 
     PyModule_AddStringConstant(module, "VERSION", VERSION);
     PyModule_AddStringConstant(module, "__version__", VERSION);
