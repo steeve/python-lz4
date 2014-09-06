@@ -32,12 +32,15 @@
 #include <Python.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
 #include <math.h>
 #include "lz4.h"
 #include "lz4hc.h"
+#include "lz4io.h"
 #include "python-lz4.h"
 
 #define MAX(a, b)               ((a) > (b) ? (a) : (b))
+#define throwWarn(msg)    PyErr_WarnEx(PyExc_UserWarning, msg, 1)
 
 typedef int (*compressor)(const char *source, char *dest, int isize);
 
@@ -53,6 +56,16 @@ static inline uint32_t load_le32(const char *c) {
     return d[0] | (d[1] << 8) | (d[2] << 16) | (d[3] << 24);
 }
 
+static inline char* add_extension(char *input) {
+    char* output;
+
+    output = (char*)malloc(strlen(input)+4);
+    strcpy(output, input);
+    strcat(output, ".lz4");
+
+    return output;
+}
+
 static const int hdr_size = sizeof(uint32_t);
 
 static PyObject *compress_with(compressor compress, PyObject *self, PyObject *args) {
@@ -62,6 +75,7 @@ static PyObject *compress_with(compressor compress, PyObject *self, PyObject *ar
     char *dest;
     int dest_size;
 
+    (void)self;
     if (!PyArg_ParseTuple(args, "s#", &source, &source_size))
         return NULL;
 
@@ -99,6 +113,7 @@ static PyObject *py_lz4_uncompress(PyObject *self, PyObject *args) {
     int source_size;
     uint32_t dest_size;
 
+    (void)self;
     if (!PyArg_ParseTuple(args, "s#", &source, &source_size)) {
         return NULL;
     }
@@ -125,6 +140,91 @@ static PyObject *py_lz4_uncompress(PyObject *self, PyObject *args) {
     return result;
 }
 
+static PyObject *py_lz4_compressFileDefault(PyObject *self, PyObject *args) {
+    char* input;
+    char* output = NULL;
+    int compLevel = 0;
+    
+    (void)self;
+    if (!PyArg_ParseTuple(args, "s|i", &input, &compLevel)) {
+        return NULL;
+    }
+    
+    output = add_extension(input);
+    
+    LZ4IO_compressFilename(input, output, compLevel);
+    return Py_None;
+}
+
+static PyObject *py_lz4_compressFileAdv(PyObject *self, PyObject *args, \
+                                        PyObject *keywds) {
+    char* input;
+    char* output = NULL;
+    int compLevel = 0;
+    int overwrite = 1;
+    int blockSizeID = 7;
+    int blockMode = 1;
+    int blockCheck = 0;
+    int streamCheck = 1;
+    int verbosity = 0;
+
+    char* oMsg = "Invalid input for overwrite. Using default value.";
+    char* bmMsg = "Invalid input for blockMode. Using default value.";
+    char* bsMsg = "Invalid input for blockSizeID. Using default value.";
+    char* bcMsg = "Invalid input for blockCheck. Using default value.";
+    char* scMsg = "Invalid input for streamCheck. Using default value.";
+    char* vMsg = "Invalid input for verbosity. Using default value.";
+
+    static char *kwlist[] = {"input", "compLevel", "output", "overwrite", 
+                             "blockSizeID", "blockMode", "blockCheck", 
+                             "streamCheck", "verbosity", NULL};
+
+    (void)self;
+    if (!PyArg_ParseTupleAndKeywords(args, keywds, "si|siiiiii", kwlist,
+                                     &input, &compLevel, &output, &overwrite, 
+                                     &blockSizeID, &blockMode, &blockCheck, 
+                                     &streamCheck, &verbosity)) {
+        return NULL;
+    }
+    
+    if (!output) { output = add_extension(input); }
+    (overwrite!=0 && overwrite!=1) ? throwWarn(oMsg) : \
+                                     (void)LZ4IO_setOverwrite(overwrite);
+    (3 < blockSizeID && blockSizeID < 8) ? (void)LZ4IO_setBlockSizeID(blockSizeID) : \
+                                           throwWarn(bsMsg);
+    (blockCheck == 0 || blockCheck == 1) ? (void)LZ4IO_setBlockChecksumMode(blockCheck) : \
+                                           throwWarn(bcMsg);
+    (streamCheck == 0 || streamCheck == 1) ? (void)LZ4IO_setStreamChecksumMode(streamCheck) : \
+                                             throwWarn(scMsg);
+    (-1 < verbosity && verbosity < 5) ? (void)LZ4IO_setNotificationLevel(verbosity) : \
+                                        throwWarn(vMsg);
+    (blockMode == 0 || blockMode == 1) ? \
+        ((blockMode == 0 ) ? LZ4IO_setBlockMode(chainedBlocks) : \
+        (void)LZ4IO_setBlockMode(independentBlocks)) : throwWarn(bmMsg);
+    
+    LZ4IO_compressFilename(input, output, compLevel);
+    return Py_None;
+}
+
+static PyObject *py_lz4_decompressFileDefault(PyObject *self, PyObject *args) {
+    char* input;
+    char* output;
+    int outLen;
+
+    (void)self;
+    if (!PyArg_ParseTuple(args, "s", &input)) {
+        return NULL;
+    }
+    
+    outLen=strlen(input) - 4;
+    output = (char*)calloc(outLen, sizeof(char));
+    strncpy(output, input, outLen);
+    
+    LZ4IO_decompressFilename(input, output);
+    return Py_None;
+}
+
+
 static PyMethodDef Lz4Methods[] = {
     {"LZ4_compress",  py_lz4_compress, METH_VARARGS, COMPRESS_DOCSTRING},
     {"LZ4_uncompress",  py_lz4_uncompress, METH_VARARGS, UNCOMPRESS_DOCSTRING},
@@ -134,6 +234,9 @@ static PyMethodDef Lz4Methods[] = {
     {"decompress",  py_lz4_uncompress, METH_VARARGS, UNCOMPRESS_DOCSTRING},
     {"dumps",  py_lz4_compress, METH_VARARGS, COMPRESS_DOCSTRING},
     {"loads",  py_lz4_uncompress, METH_VARARGS, UNCOMPRESS_DOCSTRING},
+    {"compressFileAdv", (PyCFunction)py_lz4_compressFileAdv, METH_VARARGS | METH_KEYWORDS, COMPF_ADV_DOCSTRING},
+    {"compressFileDefault", py_lz4_compressFileDefault, METH_VARARGS, COMPF_DEFAULT_DOCSTRING},
+    {"decompressFileDefault", py_lz4_decompressFileDefault, METH_VARARGS, DECOMP_FILE_DOCSTRING},
     {NULL, NULL, 0, NULL}
 };
 

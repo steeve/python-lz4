@@ -20,6 +20,8 @@ setup(
         Extension('lz4', [
             'src/lz4.c',
             'src/lz4hc.c',
+            'src/lz4io.c',
+            'src/xxhash.c',
             'src/python-lz4.c'
         ], extra_compile_args=[
             "-std=c99",
