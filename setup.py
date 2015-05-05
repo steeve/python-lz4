@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-
+import sys
 from setuptools import setup, find_packages, Extension
 
 VERSION = (0, 7, 0)
@@ -31,7 +31,7 @@ setup(
             "-DLZ4_VERSION=\"r119\"",
         ])
     ],
-    setup_requires=["nose>=1.0"],
+    setup_requires=["nose>=1.0"] if 'test' in sys.argv else [],
     test_suite = "nose.collector",
     classifiers=[
         'Development Status :: 5 - Production/Stable',
