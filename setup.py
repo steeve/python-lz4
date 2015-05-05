@@ -31,7 +31,9 @@ setup(
             "-DLZ4_VERSION=\"r119\"",
         ])
     ],
-    setup_requires=["nose>=1.0"],
+    extras_require={
+        'test': ["nose>=1.0"],
+    },
     test_suite = "nose.collector",
     classifiers=[
         'Development Status :: 5 - Production/Stable',
