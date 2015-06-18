@@ -3,7 +3,7 @@
 
 from setuptools import setup, find_packages, Extension
 
-VERSION = (0, 7, 0)
+VERSION = (0, 8, 0)
 VERSION_STR = ".".join([str(x) for x in VERSION])
 
 setup(
@@ -28,7 +28,7 @@ setup(
             "-W",
             "-Wundef",
             "-DVERSION=\"%s\"" % VERSION_STR,
-            "-DLZ4_VERSION=\"r119\"",
+            "-DLZ4_VERSION=\"r130\"",
         ])
     ],
     setup_requires=["nose>=1.0"],
