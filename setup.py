@@ -1,10 +1,16 @@
 #!/usr/bin/env python
 
 
-from setuptools import setup, find_packages, Extension
+from distutils.core import setup, Extension
+import sys
 
 VERSION = (0, 7, 0)
 VERSION_STR = ".".join([str(x) for x in VERSION])
+
+kwarg=dict()
+if sys.version_info >= (2, 7):
+    kwarg['setup_requires']=["nose>=1.0"]
+    kwarg['test_suite'] = "nose.collector"
 
 setup(
     name='lz4',
@@ -14,7 +20,7 @@ setup(
     author='Steeve Morin',
     author_email='steeve.morin@gmail.com',
     url='https://github.com/steeve/python-lz4',
-    packages=find_packages('src'),
+    packages=[],
     package_dir={'': 'src'},
     ext_modules=[
         Extension('lz4', [
@@ -23,7 +29,7 @@ setup(
             'src/python-lz4.c'
         ], extra_compile_args=[
             "-std=c99",
-            "-O3",
+#            "-O3",
             "-Wall",
             "-W",
             "-Wundef",
@@ -31,8 +37,6 @@ setup(
             "-DLZ4_VERSION=\"r119\"",
         ])
     ],
-    setup_requires=["nose>=1.0"],
-    test_suite = "nose.collector",
     classifiers=[
         'Development Status :: 5 - Production/Stable',
         'License :: OSI Approved :: BSD License',
@@ -42,5 +46,6 @@ setup(
         'Programming Language :: Python :: 2.6',
         'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3.3',
-    ],
+    ], 
+    **kwarg
 )
