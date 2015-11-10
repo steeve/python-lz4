@@ -125,6 +125,53 @@ static PyObject *py_lz4_uncompress(PyObject *self, PyObject *args) {
     return result;
 }
 
+/*
+ * access to the original lz4_decompress_safe() function
+ * expect 3 arguments 
+ *  - a compressed string in raw format (without the size header)
+ *  - inputSize, the number of bytes to use from the compressed string, 
+ *    if zero then use all the string
+ *  - maxOutputSize, the size of the output buffer, if too small then
+ *    raise a ValueError exception, if too big then resized to match
+ *    the uncompressed size.
+ */
+static PyObject *py_lz4_decompress_safe(PyObject *self, PyObject *args) {
+    PyObject *result;
+    const char *source;
+    int source_size;
+    int inputSize;
+    int maxOutputSize;
+
+    if (!PyArg_ParseTuple(args, "s#ii", &source, &source_size, &inputSize, &maxOutputSize)) {
+        return NULL;
+    }
+
+    if (inputSize > source_size) {
+        PyErr_SetString(PyExc_ValueError, "inputSize bigger than source length");
+        return NULL;
+    }
+
+    if (inputSize == 0) {
+        inputSize = source_size;
+    }
+
+    result = PyBytes_FromStringAndSize(NULL, maxOutputSize);
+    if (result != NULL) {
+        char *dest = PyBytes_AS_STRING(result);
+        int osize = LZ4_decompress_safe(source, dest, inputSize, maxOutputSize);
+        if (osize < 0) {
+            PyErr_Format(PyExc_ValueError, "corrupt input at byte %d", -osize);
+            Py_CLEAR(result);
+        } 
+        if (osize < maxOutputSize) {
+            if (_PyBytes_Resize(&result, osize) < 0) {
+                return NULL;
+            }
+        }
+    }
+    return result;
+}
+
 static PyMethodDef Lz4Methods[] = {
     {"LZ4_compress",  py_lz4_compress, METH_VARARGS, COMPRESS_DOCSTRING},
     {"LZ4_uncompress",  py_lz4_uncompress, METH_VARARGS, UNCOMPRESS_DOCSTRING},
@@ -134,6 +181,7 @@ static PyMethodDef Lz4Methods[] = {
     {"decompress",  py_lz4_uncompress, METH_VARARGS, UNCOMPRESS_DOCSTRING},
     {"dumps",  py_lz4_compress, METH_VARARGS, COMPRESS_DOCSTRING},
     {"loads",  py_lz4_uncompress, METH_VARARGS, UNCOMPRESS_DOCSTRING},
+    {"LZ4_decompress_safe",  py_lz4_decompress_safe, METH_VARARGS, LZ4_DECOMPRESS_SAFE_DOCSTRING},
     {NULL, NULL, 0, NULL}
 };
 
