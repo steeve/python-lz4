@@ -31,11 +31,28 @@
 
 #include <Python.h>
 #include <stdlib.h>
-#include <stdint.h>
 #include <math.h>
 #include "lz4.h"
 #include "lz4hc.h"
 #include "python-lz4.h"
+
+
+#if defined (__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L)   /* C99 */
+# include <stdint.h>
+  typedef  uint8_t BYTE;
+  typedef uint16_t U16;
+  typedef uint32_t U32;
+  typedef  int32_t S32;
+  typedef uint64_t U64;
+#else
+  typedef unsigned char       BYTE;
+  typedef unsigned short      U16;
+  typedef unsigned int        U32;
+  typedef   signed int        S32;
+  typedef unsigned long long  U64;
+#endif
+
+
 
 #define MAX(a, b)               ((a) > (b) ? (a) : (b))
 
@@ -55,6 +72,40 @@ static inline uint32_t load_le32(const char *c) {
 
 static const int hdr_size = sizeof(uint32_t);
 
+
+static PyObject *py_lz4_compress_fast(PyObject *self, PyObject *args) {
+    PyObject *result;
+    const char *source;
+    int source_size;
+    char *dest;
+    int dest_size;
+    int acceleration;
+
+    if (!PyArg_ParseTuple(args, "s#I", &source, &source_size, &acceleration))
+        return NULL;
+
+    dest_size = hdr_size + LZ4_compressBound(source_size);
+    result = PyBytes_FromStringAndSize(NULL, dest_size);
+    if (result == NULL) {
+        return NULL;
+    }
+    dest = PyBytes_AS_STRING(result);
+    store_le32(dest, source_size);
+    if (source_size > 0) {
+    	//int LZ4_compress_fast(const char* source, char* dest, int inputSize, int maxOutputSize, int acceleration)
+        int osize = LZ4_compress_fast(source, dest + hdr_size, source_size, LZ4_compressBound(source_size), acceleration);
+        int actual_size = hdr_size + osize;
+        /* Resizes are expensive; tolerate some slop to avoid. */
+        if (actual_size < (dest_size / 4) * 3) {
+            _PyBytes_Resize(&result, actual_size);
+        } else {
+            Py_SIZE(result) = actual_size;
+        }
+    }
+    return result;
+}
+
+
 static PyObject *compress_with(compressor compress, PyObject *self, PyObject *args) {
     PyObject *result;
     const char *source;
@@ -73,7 +124,10 @@ static PyObject *compress_with(compressor compress, PyObject *self, PyObject *ar
     dest = PyBytes_AS_STRING(result);
     store_le32(dest, source_size);
     if (source_size > 0) {
-        int osize = compress(source, dest + hdr_size, source_size);
+        int osize = -1;
+        Py_BEGIN_ALLOW_THREADS
+        osize = compress(source, dest + hdr_size, source_size);
+        Py_END_ALLOW_THREADS
         int actual_size = hdr_size + osize;
         /* Resizes are expensive; tolerate some slop to avoid. */
         if (actual_size < (dest_size / 4) * 3) {
@@ -115,7 +169,10 @@ static PyObject *py_lz4_uncompress(PyObject *self, PyObject *args) {
     result = PyBytes_FromStringAndSize(NULL, dest_size);
     if (result != NULL && dest_size > 0) {
         char *dest = PyBytes_AS_STRING(result);
-        int osize = LZ4_decompress_safe(source + hdr_size, dest, source_size - hdr_size, dest_size);
+        int osize = -1;
+        Py_BEGIN_ALLOW_THREADS
+        osize = LZ4_decompress_safe(source + hdr_size, dest, source_size - hdr_size, dest_size);
+        Py_END_ALLOW_THREADS
         if (osize < 0) {
             PyErr_Format(PyExc_ValueError, "corrupt input at byte %d", -osize);
             Py_CLEAR(result);
@@ -125,15 +182,22 @@ static PyObject *py_lz4_uncompress(PyObject *self, PyObject *args) {
     return result;
 }
 
+static PyObject *py_lz4_versionnumber(PyObject *self, PyObject *args) {
+  return Py_BuildValue("i", LZ4_versionNumber());
+}
+
 static PyMethodDef Lz4Methods[] = {
+	{"LZ4_compress_fast",  py_lz4_compress_fast, METH_VARARGS, COMPRESSFAST_DOCSTRING},
     {"LZ4_compress",  py_lz4_compress, METH_VARARGS, COMPRESS_DOCSTRING},
     {"LZ4_uncompress",  py_lz4_uncompress, METH_VARARGS, UNCOMPRESS_DOCSTRING},
     {"compress",  py_lz4_compress, METH_VARARGS, COMPRESS_DOCSTRING},
+    {"compress_fast",  py_lz4_compress_fast, METH_VARARGS, COMPRESS_DOCSTRING},
     {"compressHC",  py_lz4_compressHC, METH_VARARGS, COMPRESSHC_DOCSTRING},
     {"uncompress",  py_lz4_uncompress, METH_VARARGS, UNCOMPRESS_DOCSTRING},
     {"decompress",  py_lz4_uncompress, METH_VARARGS, UNCOMPRESS_DOCSTRING},
     {"dumps",  py_lz4_compress, METH_VARARGS, COMPRESS_DOCSTRING},
     {"loads",  py_lz4_uncompress, METH_VARARGS, UNCOMPRESS_DOCSTRING},
+    {"lz4version",  py_lz4_versionnumber, METH_VARARGS, "Returns the version number of the lz4 C library"},
     {NULL, NULL, 0, NULL}
 };
 
@@ -204,7 +268,9 @@ void initlz4(void)
 
     PyModule_AddStringConstant(module, "VERSION", VERSION);
     PyModule_AddStringConstant(module, "__version__", VERSION);
+#ifdef LZ4_VERSION /* Only defined if we're building against bundled lz4 */
     PyModule_AddStringConstant(module, "LZ4_VERSION", LZ4_VERSION);
+#endif
 
 #if PY_MAJOR_VERSION >= 3
     return module;
